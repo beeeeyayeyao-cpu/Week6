@@ -42,6 +42,7 @@ team_t team = {
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 void* heap_listp;
+void* last_bp;
 
 static void *extend_heap(size_t words);
 static void *coalesce(void *bp);
@@ -53,7 +54,6 @@ static void place(void *bp, size_t asize);
  */
 int mm_init(void)
 {
-
     if ((heap_listp = mem_sbrk(4*WSIZE)) == (void*)-1) return -1;
 
     PUT(heap_listp, 0);
@@ -61,6 +61,7 @@ int mm_init(void)
     PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1));
     PUT(heap_listp + (3*WSIZE), PACK(0,1));
     heap_listp += (2*WSIZE);
+    last_bp = heap_listp;
 
     if (extend_heap(CHUNKSIZE/WSIZE)==NULL) return -1;
     return 0;
@@ -70,13 +71,46 @@ int mm_init(void)
  * mm_malloc - Allocate a block by incrementing the brk pointer.
  *     Always allocate a block whose size is a multiple of the alignment.
  */
-
 void *find_fit(size_t asize)
 {
     void * bp;
+    int count = 0;
+
+    //void * snapshot;
+    /*
     for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
     {
         if (GET_SIZE(HDRP(bp)) >= asize && GET_ALLOC(HDRP(bp)) == 0) return bp;
+    }
+    return NULL;
+    */
+
+    if (last_bp == NULL) return NULL;
+    for (void* nBp = heap_listp; nBp < last_bp; nBp = NEXT_BLKP(nBp))
+    {
+        count++;
+    }
+    int pC = 0;
+    for (bp = last_bp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
+    {
+        pC++;
+        if (GET_SIZE(HDRP(bp)) >= asize && GET_ALLOC(HDRP(bp)) == 0)
+        {
+            last_bp = bp;
+            return bp;
+        } 
+    }
+    int tV = count - pC;
+    int nC = 0;
+    for (bp = heap_listp; bp < last_bp; bp = NEXT_BLKP(bp))
+    {
+        nC++;
+        if (tV <= nC) break;
+        if (GET_SIZE(HDRP(bp)) >= asize && GET_ALLOC(HDRP(bp)) == 0)
+        {
+            last_bp = bp;
+            return bp;
+        } 
     }
     return NULL;
 }
@@ -91,6 +125,7 @@ void place(void * bp, size_t asize)
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(csize-asize, 0));
         PUT(FTRP(bp), PACK(csize-asize, 0));
+        last_bp = bp;
     }
     else {
         PUT(HDRP(bp), PACK(csize, 1));
@@ -170,6 +205,7 @@ static void *coalesce(void *ptr)
         PUT(FTRP(ptr), PACK(size, 0));
         PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0));
         ptr = PREV_BLKP(ptr);
+        last_bp = ptr; 
     }
     else 
     {
@@ -177,6 +213,7 @@ static void *coalesce(void *ptr)
         PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0));
         PUT(FTRP(NEXT_BLKP(ptr)), PACK(size, 0));
         ptr = PREV_BLKP(ptr);
+        last_bp = ptr;
     }
     return ptr;
 }

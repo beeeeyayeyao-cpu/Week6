@@ -56,7 +56,7 @@ static void insert_block(void* bp);
  */
 int mm_init(void)
 {
-    if ((heap_listp = mem_sbrk(4*WSIZE)) == (void*)-1) return -1;
+    if ((heap_listp = mem_sbrk(5*WSIZE)) == (void*)-1) return -1;
 
     PUT(heap_listp, 0);
     PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1));
@@ -67,7 +67,7 @@ int mm_init(void)
     heap_listp += (4*WSIZE);
     free_list = heap_listp;
 
-    if (extend_heap(CHUNKSIZE/WSIZE)==NULL) return -1;
+    if (extend_heap(CHUNKSIZE/WSIZE)==NULL) return -1;                        
     return 0;
 }
 

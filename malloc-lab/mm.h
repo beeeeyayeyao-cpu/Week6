@@ -5,7 +5,6 @@ extern void *mm_malloc (size_t size);
 extern void mm_free (void *ptr);
 extern void *mm_realloc(void *ptr, size_t size);
 
-
 /* 
  * Students work in teams of one or two.  Teams enter their team name, 
  * personal names and login IDs in a struct of this
@@ -41,3 +40,5 @@ extern team_t team;
 #define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
 #define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
+#define PRE_FREE_LIST(bp) (HDRP(bp) + WSIZE)
+#define NEX_FREE_LIST(bp) (HDRP(bp) + WSIZE * 2)

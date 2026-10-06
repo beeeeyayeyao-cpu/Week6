@@ -42,12 +42,14 @@ team_t team = {
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 void* heap_listp;
-void* last_bp;
+void* free_list;
 
 static void *extend_heap(size_t words);
 static void *coalesce(void *bp);
 static void *find_fit(size_t asize);
 static void place(void *bp, size_t asize);
+static void remove_block(void* bp);
+static void insert_block(void* bp);
 
 /*
  * mm_init - initialize the malloc package.
@@ -58,10 +60,12 @@ int mm_init(void)
 
     PUT(heap_listp, 0);
     PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1));
-    PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1));
-    PUT(heap_listp + (3*WSIZE), PACK(0,1));
-    heap_listp += (2*WSIZE);
-    last_bp = heap_listp;
+    PUT(heap_listp + (2*WSIZE), NULL);
+    PUT(heap_listp + (3*WSIZE), NULL);
+    PUT(heap_listp + (4*WSIZE), PACK(DSIZE, 1));
+    PUT(heap_listp + (5*WSIZE), PACK(0,1));
+    heap_listp += (4*WSIZE);
+    free_list = heap_listp;
 
     if (extend_heap(CHUNKSIZE/WSIZE)==NULL) return -1;
     return 0;
@@ -75,16 +79,8 @@ static void *find_fit(size_t asize)
 {
     void *bp;
 
-    for (bp = last_bp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+    for (bp = free_list; GET_SIZE(HDRP(bp)) > 0; bp = NEX_FREE_LIST(bp)) {
         if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
-            last_bp = bp;
-            return bp;
-        }
-    }
-
-    for (bp = heap_listp; bp < last_bp; bp = NEXT_BLKP(bp)) {
-        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
-            last_bp = bp;
             return bp;
         }
     }
@@ -96,13 +92,15 @@ void place(void * bp, size_t asize)
 {
     size_t csize = GET_SIZE(HDRP(bp));
  
+    remove_block(bp);
+
     if ((csize - asize) >= (2*DSIZE)) {
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
         bp = NEXT_BLKP(bp);
+        insert_block(bp);
         PUT(HDRP(bp), PACK(csize-asize, 0));
         PUT(FTRP(bp), PACK(csize-asize, 0));
-        last_bp = bp;
     }
     else {
         PUT(HDRP(bp), PACK(csize, 1));
@@ -166,9 +164,11 @@ static void *coalesce(void *ptr)
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
     size_t size = GET_SIZE(HDRP(ptr));
 
+    remove_block(ptr);
+
     if (prev_alloc && next_alloc)
-    {    
-        last_bp = ptr;
+    {        
+        insert_block(ptr);
         return ptr;   
     }
     else if (prev_alloc && !next_alloc)
@@ -191,10 +191,43 @@ static void *coalesce(void *ptr)
         PUT(FTRP(NEXT_BLKP(ptr)), PACK(size, 0));
         ptr = PREV_BLKP(ptr);
     }
-    last_bp = ptr;
+    insert_block(ptr);
     return ptr;
 }
 
+void remove_block(void * bp)
+{
+    void * pre = PRE_FREE_LIST(bp);
+    void * nex = NEX_FREE_LIST(bp);
+    if (pre == NULL && nex == NULL) return;
+    if (pre == NULL) 
+    {
+        void * fL = NEX_FREE_LIST(free_list);
+        free_list = fL;
+        void * bef = PRE_FREE_LIST(fL);
+        bef = NULL;
+    }
+    else
+    {
+        void * preN = NEX_FREE_LIST(pre);
+        preN = nex;
+    }
+    if (nex != NULL)
+    {
+        void * nexP = PRE_FREE_LIST(nex);
+        nexP = pre;
+    }
+}
+
+void insert_block(void * bp)
+{
+    void * firstL = free_list;
+    free_list = bp;
+    void * pre = PRE_FREE_LIST(bp);
+    void * nex = NEX_FREE_LIST(bp);
+    pre = NULL;
+    nex = firstL;
+}
 
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free

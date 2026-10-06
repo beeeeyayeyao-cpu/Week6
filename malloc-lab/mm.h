@@ -40,5 +40,10 @@ extern team_t team;
 #define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
 #define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
-#define PRE_FREE_LIST(bp) (HDRP(bp) + WSIZE)
-#define NEX_FREE_LIST(bp) (HDRP(bp) + WSIZE * 2)
+#define PRE_PTR(bp) ((char *)(bp))
+#define NEX_PTR(bp) ((char *)(bp) + WSIZE)
+
+#define GET_PRE(bp) (*(void **)(PRE_PTR(bp)))
+#define GET_NEX(bp) (*(void **)(NEX_PTR(bp)))
+
+#define PUT_PTR(p, ptr) (*(void **)(p) = (void *)(ptr))

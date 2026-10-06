@@ -56,16 +56,13 @@ static void insert_block(void* bp);
  */
 int mm_init(void)
 {
-    if ((heap_listp = mem_sbrk(5*WSIZE)) == (void*)-1) return -1;
+    if ((heap_listp = mem_sbrk(4*WSIZE)) == (void*)-1) return -1;
 
     PUT(heap_listp, 0);
     PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1));
-    PUT(heap_listp + (2*WSIZE), NULL);
-    PUT(heap_listp + (3*WSIZE), NULL);
-    PUT(heap_listp + (4*WSIZE), PACK(DSIZE, 1));
-    PUT(heap_listp + (5*WSIZE), PACK(0,1));
-    heap_listp += (4*WSIZE);
-    free_list = heap_listp;
+    PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1));
+    PUT(heap_listp + (3*WSIZE), PACK(0,1));
+    heap_listp += (2*WSIZE);
 
     if (extend_heap(CHUNKSIZE/WSIZE)==NULL) return -1;                        
     return 0;
@@ -79,7 +76,7 @@ static void *find_fit(size_t asize)
 {
     void *bp;
 
-    for (bp = free_list; GET_SIZE(HDRP(bp)) > 0; bp = NEX_FREE_LIST(bp)) {
+    for (bp = free_list; bp != NULL; bp = GET_NEX(bp)) {
         if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
             return bp;
         }
@@ -98,9 +95,9 @@ void place(void * bp, size_t asize)
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
         bp = NEXT_BLKP(bp);
-        insert_block(bp);
         PUT(HDRP(bp), PACK(csize-asize, 0));
         PUT(FTRP(bp), PACK(csize-asize, 0));
+        insert_block(bp);
     }
     else {
         PUT(HDRP(bp), PACK(csize, 1));
@@ -197,25 +194,22 @@ static void *coalesce(void *ptr)
 
 void remove_block(void * bp)
 {
-    void * pre = PRE_FREE_LIST(bp);
-    void * nex = NEX_FREE_LIST(bp);
+    void * pre = GET_PRE(bp);
+    void * nex = GET_NEX(bp);
     if (pre == NULL && nex == NULL) return;
     if (pre == NULL) 
     {
-        void * fL = NEX_FREE_LIST(free_list);
+        void * fL = GET_NEX(free_list);
         free_list = fL;
-        void * bef = PRE_FREE_LIST(fL);
-        bef = NULL;
+        PUT_PTR(PRE_PTR(fL), NULL);
     }
     else
     {
-        void * preN = NEX_FREE_LIST(pre);
-        preN = nex;
+        PUT_PTR(NEX_PTR(pre), nex);
     }
     if (nex != NULL)
     {
-        void * nexP = PRE_FREE_LIST(nex);
-        nexP = pre;
+        PUT_PTR(PRE_PTR(nex), pre);
     }
 }
 
@@ -223,10 +217,8 @@ void insert_block(void * bp)
 {
     void * firstL = free_list;
     free_list = bp;
-    void * pre = PRE_FREE_LIST(bp);
-    void * nex = NEX_FREE_LIST(bp);
-    pre = NULL;
-    nex = firstL;
+    PUT_PTR(GET_PRE(bp), NULL);
+    PUT_PTR(GET_NEX(bp), firstL);
 }
 
 /*

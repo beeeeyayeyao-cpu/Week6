@@ -63,6 +63,7 @@ int mm_init(void)
     PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1));
     PUT(heap_listp + (3*WSIZE), PACK(0,1));
     heap_listp += (2*WSIZE);
+    free_list = NULL;
 
     if (extend_heap(CHUNKSIZE/WSIZE)==NULL) return -1;                        
     return 0;
@@ -77,7 +78,7 @@ static void *find_fit(size_t asize)
     void *bp;
 
     for (bp = free_list; bp != NULL; bp = GET_NEX(bp)) {
-        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+        if (asize <= GET_SIZE(HDRP(bp))) {
             return bp;
         }
     }
@@ -91,7 +92,7 @@ void place(void * bp, size_t asize)
  
     remove_block(bp);
 
-    if ((csize - asize) >= (2*DSIZE)) {
+    if ((csize - asize) >= MIN_BLOCK_SIZE) {
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
         bp = NEXT_BLKP(bp);
@@ -155,53 +156,56 @@ void mm_free(void *ptr)
     coalesce(ptr);
 }
 
-static void *coalesce(void *ptr)
+static void *coalesce(void *bp)
 {
-    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(ptr)));
-    size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
-    size_t size = GET_SIZE(HDRP(ptr));
+    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+    size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+    size_t size = GET_SIZE(HDRP(bp));
 
-    remove_block(ptr);
+    /* Case 1: 앞뒤 모두 할당되어 병합 없음 -> 그대로 리스트에 삽입 */
+    if (prev_alloc && next_alloc) {
+        insert_block(bp);
+        return bp;
+    }
 
-    if (prev_alloc && next_alloc)
-    {        
-        insert_block(ptr);
-        return ptr;   
+    /* Case 2: 뒤 블록만 가용 블록 -> 뒤 블록을 리스트에서 빼고 합침 */
+    else if (prev_alloc && !next_alloc) {
+        remove_block(NEXT_BLKP(bp));
+        size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+        PUT(HDRP(bp), PACK(size, 0));
+        PUT(FTRP(bp), PACK(size, 0));
     }
-    else if (prev_alloc && !next_alloc)
-    {
-        size += GET_SIZE(HDRP(NEXT_BLKP(ptr)));
-        PUT(HDRP(ptr), PACK(size, 0));
-        PUT(FTRP(ptr), PACK(size, 0));
+
+    /* Case 3: 앞 블록만 가용 블록 -> 앞 블록을 리스트에서 빼고 합침 */
+    else if (!prev_alloc && next_alloc) {
+        remove_block(PREV_BLKP(bp));
+        size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+        PUT(FTRP(bp), PACK(size, 0));
+        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+        bp = PREV_BLKP(bp);
     }
-    else if (!prev_alloc && next_alloc)
-    {
-        size += GET_SIZE(HDRP(PREV_BLKP(ptr)));
-        PUT(FTRP(ptr), PACK(size, 0));
-        PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0));
-        ptr = PREV_BLKP(ptr);
+
+    /* Case 4: 앞뒤 모두 가용 블록 -> 둘 다 리스트에서 빼고 합침 */
+    else {
+        remove_block(PREV_BLKP(bp));
+        remove_block(NEXT_BLKP(bp));
+        size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
+        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+        PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+        bp = PREV_BLKP(bp);
     }
-    else 
-    {
-        size += GET_SIZE(HDRP(PREV_BLKP(ptr))) + GET_SIZE(FTRP(NEXT_BLKP(ptr)));
-        PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0));
-        PUT(FTRP(NEXT_BLKP(ptr)), PACK(size, 0));
-        ptr = PREV_BLKP(ptr);
-    }
-    insert_block(ptr);
-    return ptr;
+
+    /* 합쳐진 새 덩어리를 free_list 맨 앞에 삽입 */
+    insert_block(bp);
+    return bp;
 }
-
 void remove_block(void * bp)
 {
     void * pre = GET_PRE(bp);
     void * nex = GET_NEX(bp);
-    if (pre == NULL && nex == NULL) return;
     if (pre == NULL) 
     {
-        void * fL = GET_NEX(free_list);
-        free_list = fL;
-        PUT_PTR(PRE_PTR(fL), NULL);
+        free_list = nex;
     }
     else
     {
@@ -215,10 +219,21 @@ void remove_block(void * bp)
 
 void insert_block(void * bp)
 {
+    /*
     void * firstL = free_list;
     free_list = bp;
     PUT_PTR(GET_PRE(bp), NULL);
     PUT_PTR(GET_NEX(bp), firstL);
+    */
+
+    PUT_PTR(NEX_PTR(bp), free_list);
+    PUT_PTR(PRE_PTR(bp), NULL);
+
+    if (free_list != NULL) {
+        PUT_PTR(PRE_PTR(free_list), bp);
+    }
+
+    free_list = bp;
 }
 
 /*

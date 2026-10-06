@@ -23,6 +23,7 @@ extern team_t team;
 #define WSIZE 4
 #define DSIZE 8
 #define CHUNKSIZE (1<<12)
+#define MIN_BLOCK_SIZE  24
 
 #define MAX(x,y) ((x) > (y)? (x) : (y))
 
@@ -41,7 +42,7 @@ extern team_t team;
 #define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
 #define PRE_PTR(bp) ((char *)(bp))
-#define NEX_PTR(bp) ((char *)(bp) + WSIZE)
+#define NEX_PTR(bp) ((char *)(bp) + DSIZE)
 
 #define GET_PRE(bp) (*(void **)(PRE_PTR(bp)))
 #define GET_NEX(bp) (*(void **)(NEX_PTR(bp)))
